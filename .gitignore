@@ -1,0 +1,42 @@
+# Simulation outputs
+build/
+*.vvp
+*.out
+a.out
+*.vcd
+!results/*.vcd
+
+# Vivado / synthesis junk
+*.jou
+*.log
+*.str
+.Xil/
+vivado*.backup.*
+*.cache/
+*.hw/
+*.runs/
+*.sim/
+*.ip_user_files/
+
+# LaTeX build files
+*.aux
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.toc
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Local tool config
+.claude/
+CLAUDE.md
