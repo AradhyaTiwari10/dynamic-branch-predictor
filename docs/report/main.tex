@@ -30,14 +30,106 @@ Source code: \url{https://github.com/AradhyaTiwari10/dynamic-branch-predictor}}}
 
 \maketitle
 
-% TODO (C2): Abstract (150--200 words) and Index Terms.
+\begin{abstract}
+Conditional branches create control hazards in pipelined processors: the next instruction
+address is not known until the branch is resolved, so every wrong guess forces the pipeline
+to discard work. This paper presents the Phase~1 design and evaluation of a dynamic branch
+prediction unit written in synthesizable Verilog. The unit contains a 16-entry Branch History
+Table (BHT) of 2-bit entries indexed by the branch address, a predictor core that supports
+three strategies (static always-not-taken, 1-bit last-outcome and 2-bit saturating counter),
+a flush and penalty interface, and hardware performance counters. The design is verified with
+directed unit testbenches, a trace-driven system testbench and a Python reference model; all
+12 trace and predictor combinations match the reference model exactly. On a loop-dominated
+trace the prediction accuracy rises from 10.0\% (static) to 80.0\% (1-bit) and 89.5\% (2-bit),
+which lowers the estimated CPI of a 5-stage pipeline from 1.360 to 1.042, a speed-up of
+1.31$\times$. An alternating trace, on which both dynamic predictors reach 0\% accuracy, shows
+the limit of per-branch counters and motivates the history-based predictors planned for
+Phase~2.
+\end{abstract}
+
+\begin{IEEEkeywords}
+branch prediction, control hazards, pipelining, saturating counter, Verilog, computer architecture
+\end{IEEEkeywords}
 
 \section{Introduction}
-% TODO (C2): Introduction -- pipelining, control hazards, motivation, contributions.
+Pipelining improves throughput by overlapping the execution of several instructions. In the
+classic five-stage RISC pipeline (IF, ID, EX, MEM, WB) a new instruction is fetched every clock
+cycle, so ideally one instruction completes per cycle (CPI~=~1)~\cite{patterson2020}.
+Conditional branches break this ideal. The fetch stage must choose the next program counter
+before the branch condition has been evaluated, and in a simple five-stage design the branch
+is resolved only in the EX stage. If the fetch stage guessed wrong, the instructions fetched
+after the branch belong to the wrong path and must be flushed. This is a \emph{control hazard},
+and the number of cycles lost per wrong guess is the \emph{misprediction penalty}.
+
+Branches are frequent: in typical integer programs roughly 15--25\% of executed instructions
+are branches~\cite{hennessy2017}. Even a two-cycle penalty therefore has a large effect on CPI,
+and the effect grows with deeper pipelines and wider issue. A static policy such as
+``always predict not taken'' is cheap but performs badly on loops, whose backward branches are
+taken on almost every iteration. \emph{Dynamic} branch prediction instead records the recent
+behaviour of each branch in hardware and uses it to predict the next outcome.
+
+The goal of our project is to design, verify and compare such a predictor in hardware. The
+contributions of Phase~1 are:
+\begin{itemize}
+\item a modular, synthesizable Verilog branch prediction unit with a 16-entry BHT and three
+selectable strategies (static, 1-bit and 2-bit) behind one interface;
+\item a pipeline flush interface and performance counters that measure branches,
+mispredictions and penalty cycles directly in hardware;
+\item four branch traces, a Python reference model and a regression flow that checks the RTL
+against the model for every trace and strategy;
+\item a quantitative comparison of the three strategies in terms of prediction accuracy and
+estimated CPI.
+\end{itemize}
+
+Section~II reviews the literature, Section~III describes the proposed design and the
+verification method, Section~IV presents the Phase~1 results, Section~V lists the individual
+contributions and Section~VI outlines the plan for Phase~2.
 
 \section{Literature Review}
-% TODO (C2): Literature Review -- Smith, Lee & Smith, Yeh & Patt, McFarling,
-% Jimenez & Lin, Seznec & Michaud, textbooks; gap addressed by this work.
+\subsection{Static and simple dynamic prediction}
+Smith~\cite{smith1981} carried out one of the first systematic studies of branch prediction
+strategies using instruction traces of real programs. Static strategies such as ``always
+taken'', ``always not taken'' and prediction by opcode were compared with dynamic strategies
+that keep per-branch history in a table indexed by low-order address bits. Smith showed that
+remembering only the last outcome (a 1-bit scheme) mispredicts twice for every execution of a
+loop, once at the exit and once at the next entry, and that a 2-bit saturating up/down counter
+removes the second error because one unusual outcome cannot flip a strongly biased prediction.
+The 2-bit counter became the standard building block of hardware predictors and is the scheme
+we implement as our main design.
+
+Lee and Smith~\cite{lee1984} extended this work by studying how prediction should be combined
+with fetching the branch target. They analysed Branch Target Buffers (BTBs), which store the
+target address of recently taken branches so that the fetch stage can redirect without waiting
+for decode, and examined the effect of table size, organisation and replacement policy on
+performance. Their results show that prediction accuracy and target availability must both be
+addressed to remove the branch penalty.
+
+\subsection{History-based and modern predictors}
+Per-branch counters cannot capture patterns that depend on the sequence of recent outcomes.
+Yeh and Patt~\cite{yeh1991} introduced two-level adaptive prediction, in which a first level
+records the history of the last $k$ outcomes in a shift register and a second level of 2-bit
+counters is indexed by that history pattern. This allows a branch with a regular pattern, such
+as alternating taken and not taken, to be predicted almost perfectly. McFarling~\cite{mcfarling1993}
+proposed gshare, which XORs the global history with the branch address to reduce destructive
+aliasing in the counter table, and the combining (tournament) predictor, which uses a selector
+table to choose, per branch, between a local and a global predictor.
+
+More recent research has moved beyond tables of counters. Jim\'enez and Lin~\cite{jimenez2001}
+replaced the counters with perceptrons, simple linear neural units whose weights are learned
+from the branch history; because the hardware grows linearly with history length, much longer
+histories can be used. Seznec and Michaud~\cite{seznec2006} proposed TAGE, which uses several
+tagged tables indexed with geometrically increasing history lengths and selects the prediction
+from the longest matching history. TAGE-based designs are still the basis of many
+high-performance predictors.
+
+\subsection{Gap addressed by this work}
+The textbook treatment of control hazards~\cite{hennessy2017,patterson2020} explains these
+schemes conceptually, but advanced predictors are built on top of the basic mechanisms: a
+table indexed by the program counter, a state machine per entry, an update path and a flush
+path to the pipeline. Our project implements these foundations as synthesizable RTL with a
+common interface, verifies the state transitions cycle by cycle and measures their accuracy and
+CPI impact against a static baseline. The resulting unit is designed so that a BTB and a
+history-based predictor can be added in Phase~2 without changing the rest of the system.
 
 \section{Proposed Solution}
 % TODO (C4): Proposed Solution -- architecture, BHT, predictors, timing, traces,
@@ -51,9 +143,6 @@ Source code: \url{https://github.com/AradhyaTiwari10/dynamic-branch-predictor}}}
 
 \section{Phase 2 Plan}
 % TODO (C4): Phase 2 Plan.
-
-% List every reference until the sections that cite them are written.
-\nocite{*}
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
