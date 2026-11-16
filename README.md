@@ -69,5 +69,5 @@ python3 scripts/cpi_calc.py       # compute CPI impact
 
 ## Phase 1 deliverables
 
-- IEEE report: _link to be added_
+- IEEE report: [Phase1_IEEE_Report.pdf](docs/report/Phase1_IEEE_Report.pdf) (source: [docs/report/](docs/report/))
 - Prototype video: _link to be added_
