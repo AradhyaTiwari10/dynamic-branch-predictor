@@ -132,17 +132,257 @@ CPI impact against a static baseline. The resulting unit is designed so that a B
 history-based predictor can be added in Phase~2 without changing the rest of the system.
 
 \section{Proposed Solution}
-% TODO (C4): Proposed Solution -- architecture, BHT, predictors, timing, traces,
-% verification, CPI model.
+\subsection{Architecture overview}
+Phase~1 implements a standalone, trace-driven branch prediction unit. A testbench reads a
+trace of (PC, outcome) pairs and presents one branch to the unit per clock cycle. The unit
+predicts the branch, compares the prediction with the real outcome, counts the result and
+updates its table. Fig.~\ref{fig:block} shows the top module \texttt{branch\_predictor\_top}
+and its sub-modules, and Table~\ref{tab:modules} summarises them. The design is written in
+synthesizable Verilog~\cite{ieee1364} with parameters for the table size
+(\texttt{IDX\_BITS}~=~4) and the misprediction penalty (\texttt{PENALTY}~=~2).
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{block_diagram.png}
+\caption{Block diagram of the branch prediction unit (\texttt{branch\_predictor\_top}).
+The PC selects a BHT entry, the predictor core chooses the strategy given by \texttt{mode},
+the comparison raises \texttt{mispredict} and \texttt{flush}, and the updated state is written
+back to the BHT on the next clock edge.}
+\label{fig:block}
+\end{figure*}
+
+\begin{table}[!t]
+\caption{RTL modules of the prediction unit}
+\label{tab:modules}
+\centering
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.45cm}>{\raggedright\arraybackslash}p{4.5cm}@{}}
+\toprule
+Module & Function \\
+\midrule
+\texttt{bht} & 16 $\times$ 2-bit table, combinational read, write on clock edge, synchronous reset to 01 \\
+\texttt{pred\_static} & Always predicts not taken; state unchanged \\
+\texttt{pred\_1bit} & Predicts \texttt{state[1]}; writes \{taken, taken\} \\
+\texttt{pred\_2bit} & Predicts \texttt{state[1]}; saturating up/down count \\
+\texttt{predictor\_core} & Selects one of the three predictors with \texttt{mode} \\
+\texttt{flush\_ctrl} & Raises \texttt{flush}; adds \texttt{PENALTY} cycles per misprediction \\
+\texttt{perf\_counter} & 32-bit counter, used for branches and mispredictions \\
+\texttt{branch\_predictor\_top} & Integration of all modules \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Branch History Table and indexing}
+Each BHT entry holds a 2-bit state. Instructions are 4-byte aligned, so the two lowest PC bits
+are always zero and are skipped; the index is $\mathit{idx} = \mathit{pc}[5{:}2]$. The read is
+combinational, so the state of the current branch is available in the same cycle, and the
+write happens on the rising clock edge. All entries reset to 01 (weakly not-taken). Because
+only four PC bits are used, branches whose addresses differ only in higher bits share an entry
+(\emph{aliasing}). In our traces the branches that run together map to different entries, for
+example \texttt{0x80}$\rightarrow$0 and \texttt{0x90}$\rightarrow$4 in the nested-loop trace,
+so aliasing does not affect the Phase~1 results.
+
+\subsection{Prediction and update logic}
+All three predictors read the same 2-bit entry, which lets one table serve every mode.
+The static predictor always predicts not taken and leaves the entry unchanged. The 1-bit
+predictor predicts with \texttt{state[1]} and stores the last outcome in both bits, so after the
+first update an entry is either 00 or 11. The 2-bit predictor is the saturating counter of
+Fig.~\ref{fig:fsm}: a taken branch counts up, a not-taken branch counts down, the counter
+stops at 00 and 11, and the prediction is the most significant bit. Table~\ref{tab:fsm} lists
+the transitions. Two consecutive wrong outcomes are needed to change the prediction from a
+strong state, which is what makes the counter robust at loop exits.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\columnwidth]{fsm_2bit.png}
+\caption{State diagram of the 2-bit saturating counter. T = taken (count up), N = not taken (count down); the prediction is \texttt{state[1]}. Entries reset to WNT (01).}
+\label{fig:fsm}
+\end{figure}
+
+\begin{table}[!t]
+\caption{2-bit counter state transitions}
+\label{tab:fsm}
+\centering
+\small
+\begin{tabular}{@{}llccc@{}}
+\toprule
+State & Bits & Predict & Taken $\rightarrow$ & Not taken $\rightarrow$ \\
+\midrule
+Strongly not-taken & 00 & N & 01 & 00 \\
+Weakly not-taken   & 01 & N & 10 & 00 \\
+Weakly taken       & 10 & T & 11 & 01 \\
+Strongly taken     & 11 & T & 11 & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Timing, flush and performance counters}
+One branch is processed per clock cycle. The BHT read, the prediction and the comparison are
+combinational, so \texttt{predict\_taken} and \texttt{mispredict} are valid in the same cycle
+as the branch. On the next rising edge the BHT entry is overwritten with the next state and the
+counters are updated. The \texttt{flush\_ctrl} module raises \texttt{flush} on a misprediction
+and adds \texttt{PENALTY}~=~2 to \texttt{penalty\_cycles}, because in a five-stage pipeline
+with branch resolution in EX the two younger instructions in IF and ID are on the wrong path.
+Two \texttt{perf\_counter} instances count branches and mispredictions, so accuracy is measured
+by the hardware itself rather than by the testbench.
+
+\subsection{Branch traces}
+Four traces of 200 branches each were generated by a Python script (Table~\ref{tab:traces}).
+Each trace line is a 36-bit hexadecimal word \{PC[31:0], 3'b000, taken\} loaded with
+\texttt{\$readmemh}, and an all-ones word marks the end of the trace. The same script contains
+a reference model of the three predictors and writes the expected number of mispredictions for
+each trace and mode.
+
+\begin{table}[!t]
+\caption{Branch traces (200 branches each)}
+\label{tab:traces}
+\centering
+\small
+\begin{tabular}{@{}l>{\raggedright\arraybackslash}p{5.6cm}@{}}
+\toprule
+Trace & Description \\
+\midrule
+loop & One branch at \texttt{0x40}: 9 taken then 1 not taken, repeated 20 times \\
+nested\_loop & Inner branch \texttt{0x80} (T,T,T,N) inside an outer branch \texttt{0x90} (taken 9 of 10 times), repeated 4 times \\
+alternating & One branch at \texttt{0x100}: T, N, T, N, \ldots \\
+random & Two interleaved branches: \texttt{0x200} taken with $p=0.5$, \texttt{0x204} with $p=0.9$ (seed 42) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Verification methodology}
+Verification has three levels. (1)~A directed unit testbench applies every (state, outcome)
+pair to the three predictors and checks the prediction and next state: 24 cases. (2)~A BHT
+testbench checks the reset value of every entry, that a write changes only its own entry, that
+nothing is written when the write enable is low, and that the read is combinational: 12 checks. (3)~A trace-driven
+system testbench runs the top module on each trace in each mode and prints the branch and
+misprediction counts read from the hardware counters. A regression script runs all 12
+configurations and compares every result with the reference model; all of them match exactly.
+Waveforms of the loop trace were inspected to confirm the state transitions at each loop exit.
+
+\subsection{CPI model}
+The impact on performance is estimated with
+\begin{equation}
+\mathrm{CPI} = \mathrm{CPI}_{\mathrm{base}} + f_b \times m \times P,
+\label{eq:cpi}
+\end{equation}
+where $\mathrm{CPI}_{\mathrm{base}} = 1$ is the ideal pipeline, $f_b = 0.20$ is the fraction of
+instructions that are branches, $m$ is the measured misprediction rate and $P = 2$ is the
+penalty in cycles. The speed-up of a predictor is the ratio of the static CPI to its CPI.
 
 \section{Preliminary Results (Phase 1)}
-% TODO (C4): Preliminary Results -- accuracy and CPI table, waveform figure, discussion.
+Table~\ref{tab:results} lists the measured mispredictions, accuracy and estimated CPI for all
+12 configurations. Every value was produced by the RTL simulation and matches the reference
+model.
+
+\begin{table}[!t]
+\caption{Prediction accuracy and estimated CPI (200 branches per trace)}
+\label{tab:results}
+\centering
+\small
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+Trace & Predictor & Mispr. & Acc.\ (\%) & CPI & Speed-up \\
+\midrule
+loop        & static & 180 & 10.0 & 1.360 & 1.000 \\
+            & 1-bit  &  40 & 80.0 & 1.080 & 1.259 \\
+            & 2-bit  &  21 & \textbf{89.5} & \textbf{1.042} & \textbf{1.305} \\
+\midrule
+nested\_loop & static & 156 & 22.0 & 1.312 & 1.000 \\
+            & 1-bit  &  88 & 56.0 & 1.176 & 1.116 \\
+            & 2-bit  &  46 & \textbf{77.0} & \textbf{1.092} & \textbf{1.201} \\
+\midrule
+alternating & static & 100 & \textbf{50.0} & \textbf{1.200} & \textbf{1.000} \\
+            & 1-bit  & 200 &  0.0 & 1.400 & 0.857 \\
+            & 2-bit  & 200 &  0.0 & 1.400 & 0.857 \\
+\midrule
+random      & static & 145 & 27.5 & 1.290 & 1.000 \\
+            & 1-bit  &  73 & 63.5 & 1.146 & 1.126 \\
+            & 2-bit  &  62 & \textbf{69.0} & \textbf{1.124} & \textbf{1.148} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.9\textwidth]{loop_1bit.png}\\[2pt]
+{\small (a) 1-bit predictor: two \texttt{mispredict} pulses at each loop boundary}\\[6pt]
+\includegraphics[width=0.9\textwidth]{loop_2bit.png}\\[2pt]
+{\small (b) 2-bit predictor: one \texttt{mispredict} pulse per loop exit; the state goes 11$\rightarrow$10$\rightarrow$11}
+\caption{Simulation waveforms of the loop trace around the loop exits.}
+\label{fig:wave}
+\end{figure*}
+
+\textbf{Loops.} The 2-bit counter gives the highest accuracy on both loop traces. On the loop
+trace the static predictor is wrong on every taken branch (180 errors). The 1-bit predictor
+makes two errors at every loop boundary: the not-taken exit writes 00 into the entry, so the
+first iteration of the next loop is also predicted not taken. This gives 20 exits, 19
+re-entries and one warm-up error, 40 in total. The 2-bit counter only moves from 11 to 10 at the
+exit, which still predicts taken, so it makes one error per loop plus one warm-up error, 21 in
+total. Fig.~\ref{fig:wave} shows exactly this behaviour in the simulation waveforms. The same
+pattern explains the nested loop, where the inner branch exits every fourth iteration and the
+2-bit counter halves the mispredictions of the 1-bit predictor (46 against 88).
+
+\textbf{CPI.} On the loop trace the 2-bit predictor lowers the CPI from 1.360 to 1.042, a
+speed-up of 1.31$\times$ over the static baseline under the model of (\ref{eq:cpi}).
+
+\textbf{Alternating pattern.} Both dynamic predictors are wrong on every branch of the
+alternating trace. The 1-bit entry always holds the previous outcome, which is the opposite of
+the next one, and the 2-bit counter oscillates between 01 and 10, so its prediction also flips
+after every branch. The static predictor is right half of the time and is therefore 17\%
+faster. This case shows that per-branch counters cannot learn patterns, which is the problem
+solved by two-level predictors~\cite{yeh1991}.
+
+\textbf{Random branches.} On the random trace the 2-bit counter reduces mispredictions from 73
+to 62 compared with the 1-bit predictor, mainly on the 90\%-taken branch, where a single
+not-taken outcome no longer changes the prediction. The unbiased 50\% branch cannot be
+predicted better than chance by any scheme.
+
+\textbf{Limitations.} The CPI values are estimates from (\ref{eq:cpi}) with an assumed branch
+frequency, not measurements from a full pipeline. The traces are synthetic and short, and the
+unit predicts only the direction of a branch, not its target.
 
 \section{Individual Contributions}
-% TODO (C4): Individual Contributions -- one paragraph per member.
+\textbf{Aradhya Tiwari (project lead, integration).} Set up the repository and wrote the
+interface specification that fixes all module ports, the trace format and the result format.
+Designed the performance counter (\texttt{perf\_counter.v}), the flush and penalty interface
+(\texttt{flush\_ctrl.v}) and the top-level integration (\texttt{branch\_predictor\_top.v}),
+wrote the CPI calculator (\texttt{cpi\_calc.py}), reviewed every member's work before it was
+merged, and prepared the demonstration video.
+
+\textbf{Mouli Srivastava (predictor RTL).} Designed the static (\texttt{pred\_static.v}),
+1-bit (\texttt{pred\_1bit.v}) and 2-bit saturating counter (\texttt{pred\_2bit.v}) predictors
+with their prediction and next-state logic, and the predictor core
+(\texttt{predictor\_core.v}) that selects the strategy with the \texttt{mode} input.
+
+\textbf{Yashvi (BHT and traces).} Designed the parameterised Branch History Table
+(\texttt{bht.v}) with combinational read, clocked write and reset. Wrote the trace generator
+and reference model (\texttt{gen\_traces.py}), generated the four traces and the expected
+results, and documented the trace format and the indexing and aliasing analysis.
+
+\textbf{Anuj (verification).} Wrote the directed unit testbenches for the predictors
+(\texttt{tb\_predictors.v}, 24 cases) and the BHT (\texttt{tb\_bht.v}, 12 checks), the
+trace-driven system testbench (\texttt{tb\_top.v}) and the regression script
+(\texttt{run\_all.sh}). Produced the accuracy table, the waveform captures and the 1-bit and
+2-bit state diagrams.
+
+\textbf{Chaitanya (documentation).} Wrote this IEEE report, including the literature review,
+prepared the architecture block diagram and the state-diagram figure, and assembled the results
+tables and figures.
 
 \section{Phase 2 Plan}
-% TODO (C4): Phase 2 Plan.
+Phase~2 will extend the unit towards a complete front end and a full evaluation:
+\begin{itemize}
+\item add a Branch Target Buffer so that the unit also supplies the target address of a
+predicted-taken branch~\cite{lee1984};
+\item move the table update to the EX stage (delayed update) and integrate the unit into a
+five-stage RV32I pipeline, where \texttt{flush} clears the IF/ID and ID/EX registers;
+\item implement a history-based predictor such as gshare~\cite{mcfarling1993} and compare it
+on the alternating and nested-loop traces;
+\item synthesize the design in Vivado and report resource usage (LUTs, flip-flops) and the
+maximum clock frequency;
+\item evaluate the predictors on longer traces taken from real programs.
+\end{itemize}
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
