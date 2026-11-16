@@ -1,0 +1,61 @@
+\documentclass[conference]{IEEEtran}
+% Phase 1 IEEE report -- Dynamic Branch Prediction Unit (MCA Project 5)
+% Compile: pdflatex main && bibtex main && pdflatex main && pdflatex main
+%          (or upload main.tex, references.bib and figures/ to Overleaf)
+
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+\else % XeLaTeX / LuaLaTeX: use the Times-compatible TeX Gyre Termes font
+  \usepackage{fontspec}
+  \setmainfont{texgyretermes}[Extension=.otf, UprightFont=*-regular,
+    BoldFont=*-bold, ItalicFont=*-italic, BoldItalicFont=*-bolditalic]
+\fi
+\usepackage{cite}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{figures/}}
+
+\begin{document}
+
+\title{Design and Evaluation of a Dynamic Branch\\Prediction Unit in Verilog}
+
+\author{\IEEEauthorblockN{Aradhya Tiwari, Mouli Srivastava, Yashvi, Anuj, Chaitanya}
+\IEEEauthorblockA{Modern Computer Architecture (MCA), Project 5\\
+Source code: \url{https://github.com/AradhyaTiwari10/dynamic-branch-predictor}}}
+
+\maketitle
+
+% TODO (C2): Abstract (150--200 words) and Index Terms.
+
+\section{Introduction}
+% TODO (C2): Introduction -- pipelining, control hazards, motivation, contributions.
+
+\section{Literature Review}
+% TODO (C2): Literature Review -- Smith, Lee & Smith, Yeh & Patt, McFarling,
+% Jimenez & Lin, Seznec & Michaud, textbooks; gap addressed by this work.
+
+\section{Proposed Solution}
+% TODO (C4): Proposed Solution -- architecture, BHT, predictors, timing, traces,
+% verification, CPI model.
+
+\section{Preliminary Results (Phase 1)}
+% TODO (C4): Preliminary Results -- accuracy and CPI table, waveform figure, discussion.
+
+\section{Individual Contributions}
+% TODO (C4): Individual Contributions -- one paragraph per member.
+
+\section{Phase 2 Plan}
+% TODO (C4): Phase 2 Plan.
+
+% List every reference until the sections that cite them are written.
+\nocite{*}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
