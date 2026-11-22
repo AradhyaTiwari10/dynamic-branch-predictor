@@ -287,14 +287,187 @@ logic depth was obtained from a generic 6-input LUT mapping. Vivado, which would
 maximum frequency after place and route, was not available on our development machines.
 
 \section{Results and Discussion}
-% TODO (C3): accuracy on traces, measured CPI, aliasing and delayed update,
-% synthesis, limitations.
+\subsection{Prediction accuracy on traces}
+Table~\ref{tab:acc} shows the accuracy of the trace-driven unit; every value matches the
+reference model. The 2-bit counter is best on the single loop: the loop exit moves the counter
+from 11 to 10, which still predicts taken, so the next loop starts correctly and there is one
+error per loop instead of two for the 1-bit predictor (Fig.~\ref{fig:wave} shows such a loop exit
+in the pipeline). gshare is far better on nested\_loop (91.5\%) and alternating
+(98.5\%), because the history tells each branch where it is in its pattern; per-branch counters
+are always wrong on the alternating branch. gshare is slightly worse on loop and random: a 4-bit
+history cannot see a 10-iteration loop, so the loop is spread over several counters that each
+need training, and random outcomes make the history random as well.
+
+\begin{table}[!t]
+\caption{Prediction accuracy on traces (\%, 16 entries, 200 branches)}
+\label{tab:acc}
+\centering
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Trace & Static & 1-bit & 2-bit & gshare \\
+\midrule
+loop        & 10.0 & 80.0 & \textbf{89.5} & 86.0 \\
+nested\_loop & 22.0 & 56.0 & 77.0 & \textbf{91.5} \\
+alternating & 50.0 &  0.0 &  0.0 & \textbf{98.5} \\
+random      & 27.5 & 63.5 & \textbf{69.0} & 60.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Measured CPI in the pipeline}
+Table~\ref{tab:cpi} gives the measured CPI of the four programs with 16-entry tables. Branches
+are 25--53\% of the executed instructions, more than the 20\% assumed in Phase~1, so prediction
+matters even more. Static prediction costs between 0.455 and 0.820 extra cycles per instruction.
+The 2-bit counter reduces the loop program to CPI~1.057 (1.38$\times$ faster than static), and
+gshare gives the best result on the three programs with patterns, reaching CPI~1.040 on
+\emph{pattern}, a 1.75$\times$ speed-up. Formula~(\ref{eq:cpi}) with the measured branch
+frequency predicts every measured CPI to within 0.007; the remaining difference is exactly the
+four cycles needed to fill the pipeline, which confirms the penalty model used in Phase~1.
+
+\begin{table}[!t]
+\caption{Measured CPI in the five-stage pipeline (16 entries); speed-up vs static in brackets}
+\label{tab:cpi}
+\centering
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Program ($f_b$) & Static & 1-bit & 2-bit & gshare \\
+\midrule
+loop (0.25)        & 1.455 & 1.100 & \textbf{1.057} & 1.070 \\
+                   &       & (1.32) & (\textbf{1.38}) & (1.36) \\
+nested\_loop (0.31) & 1.488 & 1.279 & 1.152 & \textbf{1.052} \\
+                   &       & (1.16) & (1.29) & (\textbf{1.41}) \\
+alternating (0.33) & 1.500 & 1.339 & 1.339 & \textbf{1.013} \\
+                   &       & (1.12) & (1.12) & (\textbf{1.48}) \\
+pattern (0.53)     & 1.820 & 1.474 & 1.250 & \textbf{1.040} \\
+                   &       & (1.24) & (1.46) & (\textbf{1.75}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.78\textwidth]{cpu_loop_flush.png}
+\caption{Pipeline waveform, loop program, 2-bit predictor, at the first loop exit. The branch
+at 0x20 was predicted taken; in EX it resolves not taken, \texttt{flush} goes high, the two
+younger instructions become bubbles (\texttt{valid\_d}, \texttt{valid\_e} low) and fetch restarts
+at 0x24.}
+\label{fig:wave}
+\end{figure*}
+
+\subsection{Aliasing and the delayed update}
+Table~\ref{tab:alias} compares gshare with 16 and 256 entries, for an ideal predictor that is
+updated before the next branch (the program's branch stream run on the trace-driven unit) and
+for the real pipeline. In the ideal model with 16 entries, the alternating \texttt{beq} and the
+loop \texttt{bne} of the alternating program XOR to the same counter for one of their history
+patterns and keep overwriting each other, giving 203 mispredictions out of 400. With 256 entries
+and an 8-bit history they no longer collide and only 9 remain. Larger tables do not always help:
+on the loop programs a longer history spreads one branch over more counters, so warm-up costs
+more (29 to 38 on loop).
+
+The pipeline updates the predictor two cycles after the prediction. For the 1-bit and 2-bit
+counters this made no difference in any of our programs, because no branch is fetched again
+within two cycles of its own previous instance. gshare is different: when a branch follows
+another branch within two instructions, the history it is predicted with is missing the newest
+outcome. In the alternating program this shift happens to separate the two colliding branches,
+so the pipeline has only 6 mispredictions where the ideal model has 203; in \emph{pattern} it
+slightly hurts (15 instead of 11). The delayed history is therefore not simply better or worse,
+but it changes which branches alias, and an evaluation based only on traces would not show it.
+
+\begin{table}[!t]
+\caption{gshare mispredictions: table size and update timing}
+\label{tab:alias}
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+ & \multicolumn{2}{c}{Ideal update} & \multicolumn{2}{c}{Pipeline (EX update)} \\
+\cmidrule(lr){2-3}\cmidrule(l){4-5}
+Program (branches) & 16 & 256 & 16 & 256 \\
+\midrule
+loop (220)        & 29  & 38 & 29 & 38 \\
+nested\_loop (204) & 15  & 22 & 15 & 22 \\
+alternating (400) & 203 &  9 &  6 & 10 \\
+pattern (450)     & 11  & 14 & 15 & 19 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Synthesis}
+Table~\ref{tab:synth} lists the Yosys results. With 16 entries the complete pipeline unit (BHT,
+BTB, GHR and two predictor cores) needs only 89 LUTs, 52 flip-flops and 11 LUT-RAM blocks for the
+BTB tags and targets, with a longest path of 5 LUT levels. Going to 256 entries multiplies the
+cost by about 13 (1149 LUTs, 776 flip-flops) and adds two LUT levels, because each table bit is a
+flip-flop with reset and the read multiplexers grow with the number of entries. The trace-driven
+unit has more flip-flops at 16 entries because of its three 32-bit counters. Since the logic depth
+stays at 5--7 LUT levels, the predictor should not be the critical path of a simple FPGA pipeline,
+but this has to be confirmed with Vivado timing.
+
+\begin{table}[!t]
+\caption{Yosys synthesis, Xilinx 7-series primitives}
+\label{tab:synth}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Module & Entries & LUT & FF & LUTRAM & Depth \\
+\midrule
+\texttt{branch\_predictor\_top} & 16  &   43 & 131 &  0 & 6 \\
+                                & 256 &  626 & 615 &  0 & 6 \\
+\texttt{bp\_unit}               & 16  &   89 &  52 & 11 & 5 \\
+                                & 256 & 1149 & 776 & 76 & 7 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Limitations}
+The programs are short and synthetic and the subset has no loads, stores or jumps, so the
+pipeline never stalls for data and the CPI differences come only from branches. The GHR is
+updated non-speculatively, which real processors avoid by updating it at fetch and repairing it
+on a flush. Synthesis gives resource counts and logic depth but no maximum frequency.
 
 \section{Individual Contributions}
-% TODO (C3): one paragraph per member (Phase 1 + Phase 2).
+\textbf{Aradhya Tiwari (project lead, integration).} Wrote the interface specification and set up
+the repository. Designed \texttt{perf\_counter}, \texttt{flush\_ctrl} and both integration levels:
+\texttt{branch\_predictor\_top} (with gshare) and \texttt{bp\_unit}, and the five-stage
+\texttt{pipeline\_cpu} with forwarding, flush and delayed update. Wrote the CPI analysis
+(\texttt{cpi\_calc.py}) and the Yosys synthesis flow, reviewed every turn and prepared the video.
+
+\textbf{Mouli Srivastava (predictor and data-path RTL).} Designed the static, 1-bit and 2-bit
+predictors and the predictor core (Phase~1), and the global history register, the gshare index
+logic, the ALU, register file, instruction decoder and branch resolution unit (Phase~2).
+
+\textbf{Yashvi (tables, traces and programs).} Designed the Branch History Table and its second
+read port and the Branch Target Buffer. Wrote the trace generator and reference model (extended
+to gshare and variable table size), the assembler, the instruction-set simulator and the four
+test programs, and documented the traces, programs and aliasing.
+
+\textbf{Anuj (verification).} Wrote the unit testbenches for the predictors, BHT, BTB and gshare,
+the trace-driven and pipeline system testbenches and the regression script that runs all 80
+configurations. Produced the result tables, the waveform captures, the waveform plotting script
+and the state diagrams.
+
+\textbf{Chaitanya (documentation).} Wrote the Phase~1 and final IEEE reports, including the
+literature review and the results discussion, prepared the architecture, state-diagram and
+pipeline figures, and assembled the tables.
 
 \section{Conclusion}
-% TODO (C3): conclusion and future work.
+We designed, verified and evaluated a dynamic branch prediction unit in Verilog, first as a
+trace-driven unit and then inside a five-stage pipeline where CPI is measured. The results
+confirm the classic findings: static prediction is poor on loops, the 2-bit counter removes the
+second misprediction of the 1-bit scheme and is the best simple predictor for loops, and
+per-branch counters cannot learn patterns. gshare solves the pattern problem (98.5\% on the
+alternating trace and a 1.75$\times$ speed-up on the pattern program) but is sensitive to aliasing
+in small tables, and the delayed update in a real pipeline changes which branches alias, an
+effect that trace-only studies miss. The measured CPI agrees with the Phase~1 formula to within
+the pipeline fill time, and the whole 16-entry unit costs fewer than 100 LUTs.
+
+Future work includes a speculative global history with repair on flush, a tournament predictor
+that chooses between the 2-bit counter and gshare per branch~\cite{mcfarling1993}, longer
+programs with loads and stores, and Vivado place and route to obtain the maximum frequency.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
