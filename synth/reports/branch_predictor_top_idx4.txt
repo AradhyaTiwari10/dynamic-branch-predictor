@@ -1,0 +1,29 @@
+
+13. Printing statistics.
+
+=== branch_predictor_top ===
+
+        +----------Local Count, excluding submodules.
+        | 
+      269 wires
+      576 wire bits
+       42 public wires
+      312 public wire bits
+       12 ports
+      137 port bits
+      349 cells
+       10   $scopeinfo
+        1   BUFG
+       24   CARRY4
+      115   FDRE
+       16   FDSE
+       38   IBUF
+        3   INV
+        5   LUT2
+        1   LUT3
+       21   LUT4
+        4   LUT5
+       12   LUT6
+       99   OBUF
+
+Longest path (generic 6-input LUT mapping): 6 LUT levels

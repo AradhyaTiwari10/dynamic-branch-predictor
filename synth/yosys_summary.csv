@@ -1,0 +1,5 @@
+module,idx_bits,entries,lut,ff,lutram,carry,mux,lut_levels
+branch_predictor_top,4,16,43,131,0,24,0,6
+branch_predictor_top,8,256,626,615,0,24,22,6
+bp_unit,4,16,89,52,11,0,0,5
+bp_unit,8,256,1149,776,76,0,1,7

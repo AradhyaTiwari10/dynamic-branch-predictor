@@ -1,0 +1,29 @@
+
+12. Printing statistics.
+
+=== bp_unit ===
+
+        +----------Local Count, excluding submodules.
+        | 
+     1513 wires
+     3319 wire bits
+      540 public wires
+     1058 public wire bits
+       12 ports
+      151 port bits
+     2166 cells
+       12   $scopeinfo
+        1   BUFG
+      520   FDRE
+      256   FDSE
+      110   IBUF
+       83   LUT2
+       32   LUT3
+      314   LUT4
+      419   LUT5
+      301   LUT6
+        1   MUXF7
+       41   OBUF
+       76   RAM64M
+
+Longest path (generic 6-input LUT mapping): 7 LUT levels
