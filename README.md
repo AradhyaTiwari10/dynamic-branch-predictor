@@ -12,6 +12,7 @@ on the same branch traces:
 
 ## Phase 1 deliverables
 
+- Final IEEE report (Phase 2): [Final_IEEE_Report.pdf](docs/report/Final_IEEE_Report.pdf)
 - IEEE report: [Phase1_IEEE_Report.pdf](docs/report/Phase1_IEEE_Report.pdf) (source: [docs/report/](docs/report/))
 - Prototype video: [Google Drive folder](https://drive.google.com/drive/folders/1z4gpM2yD7AkDVKXyN4GemSsOJePdDVey?usp=sharing)
 
