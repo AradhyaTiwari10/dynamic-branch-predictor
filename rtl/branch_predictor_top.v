@@ -8,7 +8,8 @@
 //
 // Purpose : Top-level integration of the branch prediction unit.
 //
-//   br_pc --> idx = br_pc[IDX_BITS+1:2] --> u_bht (2-bit state per entry)
+//   br_pc --> u_idx: idx = br_pc[IDX_BITS+1:2]  (mode 3: XOR u_ghr history)
+//                 --> u_bht (2-bit state per entry)
 //                                              |
 //                                            state
 //                                              v
@@ -18,6 +19,7 @@
 //                                          |
 //   mispredict = predict != actual --> u_flush (flush, penalty cycles)
 //   u_cnt_branch / u_cnt_mispred count branches and mispredictions
+//   u_ghr shifts in every branch outcome (global history for gshare)
 //
 // Timing (Phase 1, trace-driven): one branch per clock. The prediction and the
 // mispredict signal are combinational in the same cycle; the BHT entry and the
@@ -25,7 +27,7 @@
 //
 // Ports   :
 //   clk, rst          clock, synchronous active-high reset
-//   mode              0 = static not-taken, 1 = 1-bit, 2 = 2-bit
+//   mode              0 = static not-taken, 1 = 1-bit, 2 = 2-bit, 3 = gshare
 //   br_valid          a branch is presented this cycle
 //   br_pc             PC of the branch
 //   br_taken          actual outcome of the branch (from the trace)
@@ -54,8 +56,31 @@ module branch_predictor_top #(
     output wire [31:0] penalty_cycles
 );
 
-    // BHT index: instructions are word aligned, so skip pc[1:0].
-    wire [IDX_BITS-1:0] idx = br_pc[IDX_BITS+1:2];
+    // Global history (Phase 2): outcome of every branch, newest in bit 0.
+    wire [IDX_BITS-1:0] history;
+
+    ghr #(
+        .HIST_BITS (IDX_BITS)
+    ) u_ghr (
+        .clk     (clk),
+        .rst     (rst),
+        .upd_en  (br_valid),
+        .taken   (br_taken),
+        .history (history)
+    );
+
+    // BHT index: pc[IDX_BITS+1:2] (pc[1:0] skipped, word aligned);
+    // in mode 3 (gshare) XOR-ed with the global history.
+    wire [IDX_BITS-1:0] idx;
+
+    gshare_index #(
+        .IDX_BITS (IDX_BITS)
+    ) u_idx (
+        .mode    (mode),
+        .pc      (br_pc),
+        .history (history),
+        .idx     (idx)
+    );
 
     wire [1:0] bht_state;       // state read from the BHT for this branch
     wire [1:0] core_next_state; // updated state to write back
@@ -70,6 +95,8 @@ module branch_predictor_top #(
         .rst      (rst),
         .rd_idx   (idx),
         .rd_state (bht_state),
+        .rd2_idx  ({IDX_BITS{1'b0}}),  // second read port only used by the pipeline
+        .rd2_state(),
         .wr_en    (br_valid),
         .wr_idx   (idx),
         .wr_state (core_next_state)
