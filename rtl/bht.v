@@ -12,6 +12,10 @@
 //             available from rd_idx in the same clock cycle.
 //           - Synchronous write: updates entry wr_idx with wr_state on posedge clk.
 //           - Synchronous active-high reset: initializes all entries to INIT (2'b01 = WNT).
+//           - Phase 2: second asynchronous read port (rd2_idx / rd2_state).
+//             In the pipeline, port 1 is read by IF to predict, and port 2
+//             is read by EX to get the current state of the entry being
+//             updated. The trace-driven top ties rd2_idx to 0.
 //
 // Parameters:
 //   IDX_BITS : Width of table index (default 4 -> 16 entries)
@@ -22,6 +26,8 @@
 //   rst      : Synchronous active-high reset
 //   rd_idx   : Read index into table [IDX_BITS-1:0]
 //   rd_state : Asynchronously read 2-bit state [1:0]
+//   rd2_idx  : Second read index (Phase 2) [IDX_BITS-1:0]
+//   rd2_state: Second asynchronously read 2-bit state [1:0]
 //   wr_en    : Write enable
 //   wr_idx   : Write index into table [IDX_BITS-1:0]
 //   wr_state : 2-bit state to write [1:0]
@@ -34,6 +40,8 @@ module bht #(
     input  wire                rst,
     input  wire [IDX_BITS-1:0] rd_idx,
     output wire [1:0]          rd_state,
+    input  wire [IDX_BITS-1:0] rd2_idx,
+    output wire [1:0]          rd2_state,
     input  wire                wr_en,
     input  wire [IDX_BITS-1:0] wr_idx,
     input  wire [1:0]          wr_state
@@ -43,7 +51,8 @@ module bht #(
     reg [1:0] table_mem [0:(1<<IDX_BITS)-1];
 
     // Asynchronous (combinational) read
-    assign rd_state = table_mem[rd_idx];
+    assign rd_state  = table_mem[rd_idx];
+    assign rd2_state = table_mem[rd2_idx];
 
     // Synchronous write and synchronous reset
     integer i;
