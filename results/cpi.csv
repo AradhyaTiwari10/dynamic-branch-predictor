@@ -2,12 +2,16 @@ trace,mode,mispredict_rate,cpi,speedup_vs_static
 loop,0,0.9000,1.360,1.000
 loop,1,0.2000,1.080,1.259
 loop,2,0.1050,1.042,1.305
+loop,3,0.1400,1.056,1.288
 nested_loop,0,0.7800,1.312,1.000
 nested_loop,1,0.4400,1.176,1.116
 nested_loop,2,0.2300,1.092,1.201
+nested_loop,3,0.0850,1.034,1.269
 alternating,0,0.5000,1.200,1.000
 alternating,1,1.0000,1.400,0.857
 alternating,2,1.0000,1.400,0.857
+alternating,3,0.0150,1.006,1.193
 random,0,0.7250,1.290,1.000
 random,1,0.3650,1.146,1.126
 random,2,0.3100,1.124,1.148
+random,3,0.4000,1.160,1.112
