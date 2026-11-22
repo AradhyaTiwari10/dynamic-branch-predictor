@@ -2,12 +2,16 @@ trace,mode,branches,mispredicts,accuracy
 loop,0,200,180,10.00
 loop,1,200,40,80.00
 loop,2,200,21,89.50
+loop,3,200,28,86.00
 nested_loop,0,200,156,22.00
 nested_loop,1,200,88,56.00
 nested_loop,2,200,46,77.00
+nested_loop,3,200,17,91.50
 alternating,0,200,100,50.00
 alternating,1,200,200,0.00
 alternating,2,200,200,0.00
+alternating,3,200,3,98.50
 random,0,200,145,27.50
 random,1,200,73,63.50
 random,2,200,62,69.00
+random,3,200,80,60.00

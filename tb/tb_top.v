@@ -14,7 +14,7 @@
 //             {PC[31:0], 3'b000, taken}      last line FFFFFFFFF = end marker
 //
 // Plusargs: +trace=<file>   trace to run          (default traces/loop.mem)
-//           +mode=<0|1|2>   0 static, 1 1-bit, 2 2-bit (default 2)
+//           +mode=<0..3>    0 static, 1 1-bit, 2 2-bit, 3 gshare (default 2)
 //           +vcd=<file>     optional: dump a waveform to this VCD file
 //           +table          optional: also print the first 12 branches
 //
@@ -26,6 +26,10 @@
 //           vvp build/sim +trace=traces/loop.mem +mode=2
 //------------------------------------------------------------------------------
 module tb_top;
+
+    // Predictor table size. Phase 2: run_all.sh also uses IDX_BITS = 8
+    // (iverilog -Ptb_top.IDX_BITS=8) for the table-size comparison.
+    parameter IDX_BITS = 4;
 
     localparam [35:0] END_MARKER = 36'hFFFFFFFFF;
     localparam        MAX_LINES  = 4096;
@@ -47,7 +51,7 @@ module tb_top;
     wire [31:0] penalty_cycles;
 
     branch_predictor_top #(
-        .IDX_BITS(4),
+        .IDX_BITS(IDX_BITS),
         .PENALTY (2)
     ) dut (
         .clk             (clk),
@@ -139,7 +143,8 @@ module tb_top;
 
             // Independent checks, done by the testbench itself:
             //  - the prediction is 0 in mode 0, and the MSB of the BHT entry
-            //    in modes 1 and 2
+            //    in modes 1, 2 and 3 (in mode 3 the entry is chosen by the
+            //    gshare index, so rd_state is already the right entry)
             //  - mispredict is 1 exactly when prediction != actual outcome
             //  - the testbench keeps its own branch/mispredict counts, which
             //    are compared with the hardware counters at the end

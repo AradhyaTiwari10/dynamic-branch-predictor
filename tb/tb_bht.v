@@ -14,6 +14,8 @@
 //           Test 4  a second reset restores every entry to 01
 //           Test 5  the read is combinational: rd_state follows rd_idx
 //                   immediately, with no clock edge in between
+//           Test 6  (Phase 2) the second read port rd2 reads a different
+//                   entry at the same time as port 1
 //
 //           Prints one PASS/FAIL line per check and a final summary line:
 //             ALL BHT TESTS PASSED           or
@@ -35,6 +37,8 @@ module tb_bht;
     reg                 rst;
     reg  [IDX_BITS-1:0] rd_idx;
     wire [1:0]          rd_state;
+    reg  [IDX_BITS-1:0] rd2_idx;
+    wire [1:0]          rd2_state;
     reg                 wr_en;
     reg  [IDX_BITS-1:0] wr_idx;
     reg  [1:0]          wr_state;
@@ -47,6 +51,8 @@ module tb_bht;
         .rst     (rst),
         .rd_idx  (rd_idx),
         .rd_state(rd_state),
+        .rd2_idx (rd2_idx),
+        .rd2_state(rd2_state),
         .wr_en   (wr_en),
         .wr_idx  (wr_idx),
         .wr_state(wr_state)
@@ -145,6 +151,7 @@ module tb_bht;
         errors   = 0;
         rst      = 1'b0;
         rd_idx   = 0;
+        rd2_idx  = 0;
         wr_en    = 1'b0;
         wr_idx   = 0;
         wr_state = 2'b00;
@@ -186,6 +193,24 @@ module tb_bht;
         else begin
             errors = errors + 1;
             $display("FAIL  T5 a clock edge happened during the reads");
+        end
+
+        // Test 6 (Phase 2): both read ports at the same time, different entries.
+        rd_idx = 4'd7; rd2_idx = 4'd15; #1;
+        tests = tests + 1;
+        if (rd_state === 2'b10 && rd2_state === 2'b11)
+            $display("PASS  T6 port 1 idx 7 = 10, port 2 idx 15 = 11 at the same time");
+        else begin
+            errors = errors + 1;
+            $display("FAIL  T6 dual read: port1=%b (exp 10) port2=%b (exp 11)", rd_state, rd2_state);
+        end
+        rd2_idx = 4'd8; #1;
+        tests = tests + 1;
+        if (rd_state === 2'b10 && rd2_state === 2'b00)
+            $display("PASS  T6 changing port 2 (idx 8 = 00) does not disturb port 1");
+        else begin
+            errors = errors + 1;
+            $display("FAIL  T6 port1=%b (exp 10) port2=%b (exp 00)", rd_state, rd2_state);
         end
 
         if (errors == 0)
