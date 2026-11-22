@@ -12,7 +12,9 @@
 //           mode = 2'd0 : Static always-not-taken  (pred_static)
 //           mode = 2'd1 : 1-bit last-outcome       (pred_1bit)
 //           mode = 2'd2 : 2-bit saturating counter (pred_2bit)
-//           mode = 2'd3 : Reserved — treated as 2-bit (per spec section 1)
+//           mode = 2'd3 : gshare (Phase 2). Uses the same 2-bit saturating
+//                         counter; only the BHT index is different
+//                         (pc bits XOR global history, see gshare_index.v)
 //
 //           This module is PURELY COMBINATIONAL. All state storage lives in
 //           the BHT (rtl/bht.v, owned by Yashvi). The BHT provides `state`
@@ -74,7 +76,7 @@ module predictor_core (
             2'd0:    begin pt_sel = pt_static; ns_sel = ns_static; end
             2'd1:    begin pt_sel = pt_1bit;   ns_sel = ns_1bit;   end
             2'd2:    begin pt_sel = pt_2bit;   ns_sel = ns_2bit;   end
-            2'd3:    begin pt_sel = pt_2bit;   ns_sel = ns_2bit;   end  // reserved → 2-bit
+            2'd3:    begin pt_sel = pt_2bit;   ns_sel = ns_2bit;   end  // gshare: 2-bit counter, gshare index
             default: begin pt_sel = pt_static; ns_sel = ns_static; end
         endcase
     end
@@ -84,4 +86,3 @@ module predictor_core (
 
 endmodule
 `default_nettype wire
-
