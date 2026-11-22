@@ -16,6 +16,10 @@ Traces generated:
 Outputs:
   - traces/*.mem               : Trace files read by Verilog $readmemh
   - traces/expected_accuracy.csv : Golden accuracy table for verification
+
+Phase 2: the reference model also covers mode 3 (gshare): 4-bit global
+history, index = pc[5:2] XOR history, 2-bit counters. simulate_reference_model()
+can be imported by other scripts (scripts/iss.py uses it for program traces).
 """
 
 import os
@@ -80,22 +84,27 @@ def generate_random_trace():
         trace.append((pc_b, t_b))
     return trace
 
-def simulate_reference_model(trace, mode):
+def simulate_reference_model(trace, mode, idx_bits=4):
     """
     Simulates the branch predictor reference model.
-    Table: 16 entries (IDX_BITS=4), initialized to 1 (2'b01 = Weakly Not-Taken).
-    Indexing: idx = (pc >> 2) & 0xF
+    Table: 2^idx_bits entries (default 16, IDX_BITS=4), initialized to 1 (2'b01 = Weakly Not-Taken).
+    Indexing: idx = (pc >> 2) & (2^idx_bits - 1)
     Modes:
       0: Static always-not-taken (predict 0, no update)
       1: 1-bit predictor (predict state[1], next = 3 if taken else 0)
       2: 2-bit saturating counter (predict state[1], saturating inc/dec)
+      3: gshare (2-bit counter, idx = ((pc >> 2) & mask) ^ ghr, idx_bits-bit history)
     """
-    bht = [1] * 16
+    mask = (1 << idx_bits) - 1
+    bht = [1] * (1 << idx_bits)
+    ghr = 0
     mispredicts = 0
     total = len(trace)
 
     for pc, taken in trace:
-        idx = (pc >> 2) & 0xF
+        idx = (pc >> 2) & mask
+        if mode == 3:
+            idx ^= ghr
         state = bht[idx]
 
         if mode == 0:
@@ -104,7 +113,7 @@ def simulate_reference_model(trace, mode):
         elif mode == 1:
             pred = state >> 1
             next_state = 3 if taken else 0
-        elif mode == 2:
+        elif mode in (2, 3):
             pred = state >> 1
             if taken:
                 next_state = min(3, state + 1)
@@ -117,6 +126,7 @@ def simulate_reference_model(trace, mode):
             mispredicts += 1
 
         bht[idx] = next_state
+        ghr = ((ghr << 1) | taken) & mask  # global history, newest outcome in bit 0
 
     accuracy = ((total - mispredicts) / total) * 100.0
     return total, mispredicts, accuracy
@@ -147,14 +157,14 @@ def main():
         filepath = os.path.join(traces_dir, filename)
         write_mem_file(filepath, comment, trace)
 
-    # Compute reference model accuracy for modes 0, 1, 2
+    # Compute reference model accuracy for modes 0, 1, 2, 3
     csv_rows = []
     csv_path = os.path.join(traces_dir, "expected_accuracy.csv")
 
     with open(csv_path, "w") as f:
         f.write("trace,mode,branches,mispredicts,accuracy\n")
         for name, _, _, trace in trace_defs:
-            for mode in [0, 1, 2]:
+            for mode in [0, 1, 2, 3]:
                 branches, mispredicts, accuracy = simulate_reference_model(trace, mode)
                 line = f"{name},{mode},{branches},{mispredicts},{accuracy:.2f}"
                 f.write(line + "\n")
