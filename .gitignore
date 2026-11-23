@@ -36,7 +36,3 @@ __pycache__/
 .vscode/
 .idea/
 *.swp
-
-# Local tool config
-.claude/
-CLAUDE.md
