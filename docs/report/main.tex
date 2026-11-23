@@ -18,16 +18,28 @@
 \usepackage{array}
 \usepackage{multirow}
 \usepackage{url}
-\usepackage[hidelinks]{hyperref}
+\usepackage{balance}
+\usepackage[hidelinks,pdftitle={Design and Evaluation of a Dynamic Branch Prediction Unit in Verilog},pdfauthor={Aradhya Tiwari, Mouli Srivastava, Yashvi, Anuj, Chaitanya}]{hyperref}
 \graphicspath{{figures/}}
 
 \begin{document}
 
 \title{Design and Evaluation of a Dynamic Branch\\Prediction Unit in Verilog}
 
-\author{\IEEEauthorblockN{Aradhya Tiwari, Mouli Srivastava, Yashvi, Anuj, Chaitanya}
-\IEEEauthorblockA{Modern Computer Architecture (MCA), Project 5\\
-Source code: \url{https://github.com/AradhyaTiwari10/dynamic-branch-predictor}}}
+\author{\IEEEauthorblockN{Aradhya Tiwari}
+\IEEEauthorblockA{\textit{Modern Computer Architecture (MCA)}\\ \textit{Project 5}}
+\and
+\IEEEauthorblockN{Mouli Srivastava}
+\IEEEauthorblockA{\textit{Modern Computer Architecture (MCA)}\\ \textit{Project 5}}
+\and
+\IEEEauthorblockN{Yashvi}
+\IEEEauthorblockA{\textit{Modern Computer Architecture (MCA)}\\ \textit{Project 5}}
+\and
+\IEEEauthorblockN{Anuj}
+\IEEEauthorblockA{\textit{Modern Computer Architecture (MCA)}\\ \textit{Project 5}}
+\and
+\IEEEauthorblockN{Chaitanya}
+\IEEEauthorblockA{\textit{Modern Computer Architecture (MCA)}\\ \textit{Project 5}}}
 
 \maketitle
 
@@ -87,6 +99,8 @@ and of the delayed update, and Yosys synthesis results for two table sizes.
 Section~II reviews the literature, Section~III describes the design and the verification
 method, Section~IV presents and discusses the results, Section~V lists the individual
 contributions and Section~VI concludes.
+The source code, testbenches and results are available at
+\url{https://github.com/AradhyaTiwari10/dynamic-branch-predictor}.
 
 \section{Literature Review}
 \subsection{Static and simple dynamic prediction}
@@ -469,6 +483,7 @@ Future work includes a speculative global history with repair on flush, a tourna
 that chooses between the 2-bit counter and gshare per branch~\cite{mcfarling1993}, longer
 programs with loads and stores, and Vivado place and route to obtain the maximum frequency.
 
+\balance
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 
